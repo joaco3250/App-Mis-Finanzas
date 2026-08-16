@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos e Ingresos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, sans-serif;
+            letter-spacing: -0.011em;
+        }
+        h2, h3, .font-bold {
+            letter-spacing: -0.02em;
+        }
+        ::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+    </style>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+    <div id="pantalla-login" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-2xl max-w-sm w-full">
+            <div class="text-center mb-8">
+                <span class="text-4xl">💰</span>
+                <h2 class="text-2xl font-bold text-sky-400 mt-4">Mis Finanzas</h2>
+                <p class="text-sm text-slate-400 mt-1">Iniciá sesión para ver tus datos</p>
+            </div>
+            <div class="space-y-4">
+                <input id="email-login" type="email" placeholder="Correo electrónico" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-200 outline-none focus:border-sky-500">
+                <input id="password-login" type="password" placeholder="Contraseña" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-200 outline-none focus:border-sky-500">
+                <div class="pt-2">
+                    <button onclick="iniciarSesion()" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Entrar</button>
+                </div>
+                <p id="error-login" class="text-red-400 text-xs text-center hidden mt-2"></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="aplicacion-principal" class="hidden p-6 max-w-5xl mx-auto">
+        <nav class="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg mb-6">
+            <span class="font-bold text-sky-400 text-lg">💰 Mis Finanzas</span>
+            <div class="flex items-center gap-2">
+                <select id="filtro-mes" onchange="cambiarMesSeleccionado()" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 cursor-pointer"></select>
+                <button onclick="cerrarSesion()" class="bg-slate-700 hover:bg-red-500 text-slate-200 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Salir</button>
+            </div>
+        </nav>
+
+        <div class="flex gap-2 mb-8 bg-slate-800 border border-slate-700 rounded-xl p-1.5 w-fit">
+            <button id="tab-btn-movimientos" onclick="cambiarPestana('movimientos')" class="px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-sky-500 text-white">Movimientos</button>
+            <button id="tab-btn-analisis" onclick="cambiarPestana('analisis')" class="px-5 py-2 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:text-slate-200">Análisis</button>
+        </div>
+
+        <div id="tab-movimientos">
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-sm font-medium">Ingresos Totales (Mes)</h3>
+                    <p id="total-ingresos" class="text-2xl font-bold text-emerald-400 mt-1">$0,00</p>
+                </div>
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-sm font-medium">Gastos Totales (Mes)</h3>
+                    <p id="total-gastos" class="text-2xl font-bold text-red-400 mt-1">$0,00</p>
+                </div>
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-sm font-medium">Balance Neto Acumulado</h3>
+                    <p id="balance-neto" class="text-2xl font-bold text-sky-400 mt-1">$0,00</p>
+                </div>
+            </div>
+
+            <section class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg mb-8">
+                <h2 class="text-xl font-semibold mb-4 text-sky-300">Nuevo Movimiento</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
+                    <input id="input-fecha" type="date" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 cursor-pointer">
+                    <input id="input-descripcion" type="text" placeholder="Descripción" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm">
+                    <input id="input-monto" type="text" placeholder="Monto ($)" oninput="formatearMontoInput(this)" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm">
+                    <select id="input-tipo" onchange="actualizarCategorias()" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 cursor-pointer">
+                        <option value="gasto">Gasto (-)</option>
+                        <option value="ingreso">Ingreso (+)</option>
+                    </select>
+                    <select id="input-categoria" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 cursor-pointer">
+                        <option value="" disabled selected>Categoría</option>
+                    </select>
+                    <button id="btn-registrar" onclick="agregarMovimiento()" class="bg-sky-500 hover:bg-sky-600 text-white font-medium py-2 rounded-lg transition-colors text-sm">Registrar</button>
+                </div>
+            </section>
+
+            <section class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg mb-8 flex flex-col items-center">
+                <h2 class="text-xl font-semibold mb-4 text-sky-300 self-start">Distribución de Gastos</h2>
+                <div class="relative w-full max-w-sm h-80 flex justify-center items-center">
+                    <canvas id="graficoGastos"></canvas>
+                    <div class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none pb-8">
+                        <span class="text-xs text-slate-400 uppercase font-medium">Disponible Total</span>
+                        <span id="centro-balance" class="text-2xl font-bold text-sky-400 mt-0.5">$0,00</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                <h2 class="text-xl font-semibold mb-4 text-sky-300">Historial de Movimientos</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <input id="buscar-movimiento" type="text" oninput="actualizarUI()" placeholder="🔍 Buscar por descripción..." class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm">
+                    <select id="filtro-categoria" onchange="actualizarUI()" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-200 cursor-pointer">
+                        <option value="">Todas las categorías</option>
+                    </select>
+                </div>
+                <table class="w-full text-center text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                            <th class="py-3">Descripción</th>
+                            <th class="py-3">Categoría</th>
+                            <th class="py-3">Monto</th>
+                            <th class="py-3">Fecha</th>
+                            <th class="py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-movimientos"></tbody>
+                </table>
+            </section>
+
+        </div>
+        <div id="tab-analisis" class="hidden space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Ahorro Meses Anteriores</h3>
+                    <p id="sobrante-anterior" class="text-xl font-bold text-sky-400 mt-1">$0,00</p>
+                    <p class="text-xs text-slate-400 mt-1">Acumulado previo a este mes</p>
+                </div>
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Disponible Real del Mes</h3>
+                    <p id="disponible-total" class="text-xl font-bold text-emerald-400 mt-1">$0,00</p>
+                    <p class="text-xs text-slate-400 mt-1">Ahorro previo + Ingresos nuevos</p>
+                </div>
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Tasa de Ahorro (Mes)</h3>
+                    <p id="tasa-ahorro" class="text-xl font-bold text-sky-400 mt-1">0%</p>
+                    <p class="text-xs text-slate-400 mt-1">% del ingreso del mes no gastado</p>
+                </div>
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Promedio Diario Gasto</h3>
+                    <p id="promedio-diario" class="text-xl font-bold text-amber-400 mt-1">$0,00</p>
+                    <p class="text-xs text-slate-400 mt-1">Promedio por día del mes</p>
+                </div>
+            </div>
+
+            <section class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                <h2 class="text-xl font-semibold mb-1 text-sky-300">🏆 Top 3 Gastos del Mes</h2>
+                <p class="text-xs text-slate-400 mb-4">Categorías donde más gastaste (Excluyendo Educación, Alquiler y Servicios).</p>
+                <div id="podio-gastos" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    </div>
+            </section>
+
+            <section class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 border-b border-slate-700/60 pb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold text-sky-300">Evolución Mensual: Ingresos Nuevos vs. Gastos</h2>
+                        <p class="text-xs text-slate-400 mt-1">Mide tu rendimiento comparando solo lo que ingresaste en ese mes contra lo que gastaste.</p>
+                    </div>
+                    <div class="bg-slate-900/80 border border-slate-700 px-4 py-2.5 rounded-lg flex items-center gap-3 shrink-0">
+                        <span class="text-2xl">⚖️</span>
+                        <div>
+                            <p class="text-[11px] text-slate-400 font-medium uppercase tracking-wide">Vs. Mes Anterior</p>
+                            <p id="texto-comparativa" class="text-base font-bold text-slate-400">-</p>
+                            <p id="detalle-comparativa" class="text-[11px] text-slate-400 hidden sm:block mt-0.5">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative w-full h-72">
+                    <canvas id="graficoEvolucion"></canvas>
+                </div>
+            </section>
+
+            <section class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                <h2 class="text-xl font-semibold mb-1 text-sky-300">Tendencia del Patrimonio / Balance Neto Acumulado</h2>
+                <p class="text-xs text-slate-400 mb-4">Muestra la curva final de tu patrimonio acumulado mes a mes.</p>
+                <div class="relative w-full h-72">
+                    <canvas id="graficoBalanceHist"></canvas>
+                </div>
+            </section>
+        </div>
+        </div>
+
+    <div id="modal-overlay" class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl shadow-lg p-6 max-w-sm w-full">
+            <h3 class="text-lg font-semibold text-sky-300 mb-2">Confirmar</h3>
+            <p id="modal-mensaje" class="text-slate-300 text-sm mb-6">¿Seguro que querés continuar?</p>
+            <div class="flex justify-end gap-3">
+                <button id="modal-btn-cancelar" class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors">Cancelar</button>
+                <button id="modal-btn-confirmar" class="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // TUS LLAVES DE CONEXIÓN FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyCdmG_6KZX682mjIUGEJSbhQsPCwCkyh40",
+            authDomain: "finanzas-personales-2112.firebaseapp.com",
+            projectId: "finanzas-personales-2112",
+            storageBucket: "finanzas-personales-2112.firebasestorage.app",
+            messagingSenderId: "705777887507",
+            appId: "1:705777887507:web:2c151556138029094c52e6",
+            measurementId: "G-DQYCFMKQX9"
+        };
+
+        // Inicializar Firebase (Versión Compat)
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Variables Globales de la App
+        let movimientosPorMes = {};
+        let mesSeleccionado = obtenerMesActual();
+        let indiceEditando = null;
+        let currentUser = null; 
+
+        // Referencias a los Gráficos
+        let graficoGastosInst = null;
+        let graficoEvolucionInst = null;
+        let graficoBalanceInst = null;
+
+        const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        // --- FUNCIONES DE AUTENTICACIÓN ---
+
+        async function iniciarSesion() {
+            const email = document.getElementById('email-login').value;
+            const pass = document.getElementById('password-login').value;
+            const errorMsg = document.getElementById('error-login');
+            try {
+                await auth.signInWithEmailAndPassword(email, pass);
+                errorMsg.classList.add('hidden');
+            } catch (error) {
+                errorMsg.innerText = "Error: Correo o contraseña incorrectos.";
+                errorMsg.classList.remove('hidden');
+            }
+        }
+
+        function cerrarSesion() {
+            auth.signOut();
+        }
+
+        // --- OBSERVADOR DE SESIÓN ---
+        auth.onAuthStateChanged(async (user) => {
+            const pantallaLogin = document.getElementById('pantalla-login');
+            const aplicacion = document.getElementById('aplicacion-principal');
+
+            if (user) {
+                currentUser = user;
+                
+                // 1. PRIMERO cargamos los datos de la nube
+                await cargarDatos();
+
+                // 2. DESPUÉS ocultamos el login y mostramos la app
+                pantallaLogin.classList.add('hidden');
+                aplicacion.classList.remove('hidden');
+                
+                // 3. Inicializamos todo impecable
+                inicializarGraficos(); 
+                mesSeleccionado = obtenerMesActual();
+                asegurarMes(mesSeleccionado);
+                actualizarCategorias();
+                establecerFechaHoy();
+                actualizarUI();
+                
+            } else {
+                currentUser = null;
+                // Ocultar app, mostrar login
+                pantallaLogin.classList.remove('hidden');
+                aplicacion.classList.add('hidden');
+                movimientosPorMes = {}; 
+                document.getElementById('email-login').value = '';
+                document.getElementById('password-login').value = '';
+            }
+        });
+
+        // --- BASE DE DATOS (NUBE) ---
+
+        async function guardarDatos() {
+            if (!currentUser) return;
+            try {
+                await db.collection("usuarios").doc(currentUser.uid).set({
+                    datos: movimientosPorMes
+                });
+            } catch (error) {
+                console.error("Error guardando en la nube:", error);
+            }
+        }
+
+        async function cargarDatos() {
+            if (!currentUser) return;
+            try {
+                const docSnap = await db.collection("usuarios").doc(currentUser.uid).get();
+                if (docSnap.exists) {
+                    movimientosPorMes = docSnap.data().datos || {};
+                } else {
+                    movimientosPorMes = {};
+                }
+            } catch (error) {
+                console.error("Error cargando de la nube:", error);
+                movimientosPorMes = {};
+            }
+        }
+
+        // --- LÓGICA DE LA APLICACIÓN ---
+
+        function inicializarGraficos() {
+            if (graficoGastosInst) return; 
+
+            const ctxGastos = document.getElementById('graficoGastos').getContext('2d');
+            graficoGastosInst = new Chart(ctxGastos, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#818cf8', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9'], borderWidth: 2, borderColor: '#1e293b' }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 12, font: { size: 12 } } }, tooltip: { callbacks: { label: function(context) { if (context.label === 'Sin gastos registrados') return ' Sin gastos'; return ` ${context.label}: ${formatearMonto(context.raw)}`; } } } } }
+            });
+
+            const ctxEvolucion = document.getElementById('graficoEvolucion').getContext('2d');
+            graficoEvolucionInst = new Chart(ctxEvolucion, {
+                type: 'bar',
+                data: { labels: [], datasets: [{ label: 'Ingresos Nuevos', data: [], backgroundColor: '#10b981', borderRadius: 8, maxBarThickness: 28, categoryPercentage: 0.6, barPercentage: 0.7 }, { label: 'Gastos', data: [], backgroundColor: '#f43f5e', borderRadius: 8, maxBarThickness: 28, categoryPercentage: 0.6, barPercentage: 0.7 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 12 } } }, tooltip: { callbacks: { label: function(context) { return ` ${context.dataset.label}: ${formatearMonto(context.raw)}`; } } } }, scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false } }, y: { ticks: { color: '#94a3b8', callback: function(value) { return '$' + value.toLocaleString('es-AR'); } }, grid: { color: '#334155' } } } }
+            });
+
+            const ctxBalanceHist = document.getElementById('graficoBalanceHist').getContext('2d');
+            graficoBalanceInst = new Chart(ctxBalanceHist, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Patrimonio Neto Acumulado', data: [], borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.15)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#38bdf8' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } }, tooltip: { callbacks: { label: function(context) { return ` Patrimonio: ${formatearMonto(context.raw)}`; } } } }, scales: { x: { ticks: { color: '#94a3b8' }, grid: { display: false } }, y: { ticks: { color: '#94a3b8', callback: function(value) { return '$' + value.toLocaleString('es-AR'); } }, grid: { color: '#334155' } } } }
+            });
+        }
+
+        const CATEGORIAS = {
+            gasto: [
+                { valor: 'Alquiler / Vivienda', icono: '🏠' },
+                { valor: 'Servicios (luz, agua, gas, internet)', icono: '💡' },
+                { valor: 'Gastos Depto', icono: '🏢' },
+                { valor: 'Supermercado', icono: '🛒' },
+                { valor: 'Transporte', icono: '🚗' },
+                { valor: 'Salud', icono: '🏥' },
+                { valor: 'Educación', icono: '📚' },
+                { valor: 'Ocio y Salidas', icono: '🎉' },
+                { valor: 'Ropa', icono: '👕' },
+                { valor: 'Suscripciones', icono: '📱' },
+                { valor: 'Mascotas', icono: '🐾' },
+                { valor: 'Regalos', icono: '🎁' },
+                { valor: 'Otros Gastos', icono: '📦' }
+            ],
+            ingreso: [
+                { valor: 'Sueldo', icono: '💼' },
+                { valor: 'Freelance / Extra', icono: '🧑‍💻' },
+                { valor: 'Inversiones', icono: '📈' },
+                { valor: 'Regalo / Ayuda', icono: '🎁' },
+                { valor: 'Otros Ingresos', icono: '💰' }
+            ]
+        };
+
+        function actualizarCategorias() {
+            const tipo = document.getElementById('input-tipo').value;
+            const select = document.getElementById('input-categoria');
+            select.innerHTML = '<option value="" disabled selected>Categoría</option>';
+            CATEGORIAS[tipo].forEach(c => {
+                const option = document.createElement('option');
+                option.value = c.valor;
+                option.innerText = `${c.icono} ${c.valor}`;
+                select.appendChild(option);
+            });
+        }
+
+        function formatearMontoInput(input) {
+            let valor = input.value;
+            valor = valor.replace(/[^\d,]/g, '');
+            if (!valor) { input.value = ''; return; }
+            const partes = valor.split(',');
+            let entero = partes[0] || '';
+            let decimal = partes[1];
+            if (entero === '' && valor.startsWith(',')) entero = '0';
+            entero = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            if (decimal !== undefined) {
+                decimal = decimal.slice(0, 2);
+                input.value = `$ ${entero},${decimal}`;
+            } else if (valor.includes(',')) {
+                input.value = `$ ${entero},`;
+            } else {
+                input.value = `$ ${entero}`;
+            }
+        }
+
+        function cambiarPestana(pestana) {
+            const esMovimientos = pestana === 'movimientos';
+            document.getElementById('tab-movimientos').classList.toggle('hidden', !esMovimientos);
+            document.getElementById('tab-analisis').classList.toggle('hidden', esMovimientos);
+            const btnMovimientos = document.getElementById('tab-btn-movimientos');
+            const btnAnalisis = document.getElementById('tab-btn-analisis');
+            btnMovimientos.classList.toggle('bg-sky-500', esMovimientos);
+            btnMovimientos.classList.toggle('text-white', esMovimientos);
+            btnMovimientos.classList.toggle('text-slate-400', !esMovimientos);
+            btnAnalisis.classList.toggle('bg-sky-500', !esMovimientos);
+            btnAnalisis.classList.toggle('text-white', !esMovimientos);
+            btnAnalisis.classList.toggle('text-slate-400', esMovimientos);
+            if (!esMovimientos) {
+                actualizarAnalisis();
+            } else {
+                actualizarUI();
+            }
+        }
+
+        function cambiarMesSeleccionado() {
+            mesSeleccionado = document.getElementById('filtro-mes').value;
+            actualizarUI();
+            actualizarAnalisis();
+        }
+
+        function actualizarUI() {
+            asegurarMes(obtenerMesActual());
+            poblarSelectorMeses();
+
+            const tbody = document.getElementById('tabla-movimientos');
+            tbody.innerHTML = '';
+            let acumuladoGastos = {};
+
+            const movimientosDelMes = movimientosPorMes[mesSeleccionado] || [];
+            poblarFiltroCategoria(movimientosDelMes);
+
+            const textoBusqueda = document.getElementById('buscar-movimiento').value.toLowerCase().trim();
+            const categoriaFiltro = document.getElementById('filtro-categoria').value;
+            let huboCoincidencias = false;
+
+            for (let index = movimientosDelMes.length - 1; index >= 0; index--) {
+                const m = movimientosDelMes[index];
+
+                if (m.tipo !== 'ingreso') {
+                    acumuladoGastos[m.cat] = (acumuladoGastos[m.cat] || 0) + m.monto;
+                }
+
+                const coincideTexto = !textoBusqueda || m.desc.toLowerCase().includes(textoBusqueda);
+                const coincideCategoria = !categoriaFiltro || m.cat === categoriaFiltro;
+                if (!coincideTexto || !coincideCategoria) continue;
+
+                huboCoincidencias = true;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="py-3 text-slate-200">${m.desc}</td>
+                    <td class="py-3"><span class="bg-slate-700 px-2 py-1 rounded">${m.cat}</span></td>
+                    <td class="py-3 ${m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'}">${formatearMonto(m.monto)}</td>
+                    <td class="py-3 text-slate-400">${formatearFecha(m.fecha)}</td>
+                    <td class="py-3">
+                        <button onclick="editarMovimiento(${index})" class="text-sky-400 hover:text-sky-300 mr-2">✏️</button>
+                        <button onclick="eliminarMovimiento(${index})" class="text-red-500 hover:text-red-300">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            if (!huboCoincidencias && movimientosDelMes.length > 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="5" class="py-6 text-slate-500">No se encontraron movimientos con ese criterio.</td>`;
+                tbody.appendChild(tr);
+            }
+
+            const { totalIngresos, totalGastos } = calcularTotalesDelMes(movimientosDelMes);
+            document.getElementById('total-ingresos').innerText = formatearMonto(totalIngresos);
+            document.getElementById('total-gastos').innerText = formatearMonto(totalGastos);
+
+            const balance = calcularBalanceHistorico();
+            document.getElementById('balance-neto').innerText = formatearMonto(balance);
+
+            const elCentro = document.getElementById('centro-balance');
+            elCentro.innerText = formatearMonto(balance);
+            elCentro.className = `text-2xl font-bold mt-0.5 ${balance >= 0 ? 'text-sky-400' : 'text-red-400'}`;
+
+            const categoriasGastos = Object.keys(acumuladoGastos);
+            const montosGastos = Object.values(acumuladoGastos);
+
+            if (graficoGastosInst) {
+                if (categoriasGastos.length === 0) {
+                    graficoGastosInst.data.labels = ['Sin gastos registrados'];
+                    graficoGastosInst.data.datasets[0].data = [1];
+                    graficoGastosInst.data.datasets[0].backgroundColor = ['#334155'];
+                } else {
+                    graficoGastosInst.data.labels = categoriasGastos;
+                    graficoGastosInst.data.datasets[0].data = montosGastos;
+                    graficoGastosInst.data.datasets[0].backgroundColor = ['#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#818cf8', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9'];
+                }
+                graficoGastosInst.update();
+            }
+        }
+
+        function agregarMovimiento() {
+            const fechaInput = document.getElementById('input-fecha').value;
+            const desc = document.getElementById('input-descripcion').value;
+            const monto = obtenerMontoNumerico(document.getElementById('input-monto').value);
+            const cat = document.getElementById('input-categoria').value;
+            const tipo = document.getElementById('input-tipo').value;
+
+            if (!fechaInput || !desc || isNaN(monto) || !cat) return alert('Por favor, completa todos los campos.');
+
+            const [anio, mes, dia] = fechaInput.split('-');
+            const mesDelMovimiento = `${anio}-${mes}`;
+            
+            asegurarMes(mesDelMovimiento);
+
+            if (indiceEditando !== null) {
+                if (mesDelMovimiento === mesSeleccionado) {
+                    movimientosPorMes[mesSeleccionado][indiceEditando] = { desc, monto, cat, tipo, fecha: fechaInput };
+                } else {
+                    movimientosPorMes[mesSeleccionado].splice(indiceEditando, 1);
+                    movimientosPorMes[mesDelMovimiento].push({ desc, monto, cat, tipo, fecha: fechaInput });
+                }
+                indiceEditando = null;
+                document.getElementById('btn-registrar').innerText = 'Registrar';
+            } else {
+                movimientosPorMes[mesDelMovimiento].push({ desc, monto, cat, tipo, fecha: fechaInput });
+            }
+
+            guardarDatos(); 
+            mesSeleccionado = mesDelMovimiento; 
+
+            document.getElementById('input-descripcion').value = '';
+            document.getElementById('input-monto').value = '';
+            document.getElementById('input-categoria').value = '';
+            establecerFechaHoy();
+
+            actualizarUI();
+            actualizarAnalisis();
+        }
+
+        function editarMovimiento(index) {
+            const m = movimientosPorMes[mesSeleccionado][index];
+            document.getElementById('input-fecha').value = m.fecha;
+            document.getElementById('input-descripcion').value = m.desc;
+            const inputMonto = document.getElementById('input-monto');
+            inputMonto.value = m.monto.toString().replace('.', ',');
+            formatearMontoInput(inputMonto);
+            document.getElementById('input-tipo').value = m.tipo;
+            actualizarCategorias();
+            document.getElementById('input-categoria').value = m.cat;
+            indiceEditando = index;
+            document.getElementById('btn-registrar').innerText = 'Guardar Cambios';
+            document.getElementById('input-descripcion').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        async function eliminarMovimiento(index) {
+            const confirmado = await mostrarConfirmacion('¿Seguro que querés eliminar este movimiento?');
+            if (!confirmado) return;
+            movimientosPorMes[mesSeleccionado].splice(index, 1);
+            
+            guardarDatos(); 
+
+            if (indiceEditando !== null) {
+                indiceEditando = null;
+                document.getElementById('btn-registrar').innerText = 'Registrar';
+                establecerFechaHoy();
+            }
+
+            actualizarUI();
+            actualizarAnalisis();
+        }
+
+        // --- FUNCIONES AUXILIARES INTERNAS ---
+
+        function obtenerMesActual() {
+            const hoy = new Date();
+            return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function nombreMes(mesKey) {
+            const [anio, mes] = mesKey.split('-');
+            return `${NOMBRES_MES[parseInt(mes, 10) - 1]} ${anio}`;
+        }
+
+        function formatearFecha(fechaISO) {
+            if (!fechaISO) return '-';
+            const [anio, mes, dia] = fechaISO.split('-');
+            return `${dia} ${NOMBRES_MES[parseInt(mes, 10) - 1].slice(0, 3)}`;
+        }
+
+        function formatearMonto(numero) {
+            return `$${numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        function obtenerMontoNumerico(texto) {
+            if (!texto) return NaN;
+            return parseFloat(texto.replace(/\$/g, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+        }
+
+        function establecerFechaHoy() {
+            const hoy = new Date();
+            const yyyy = hoy.getFullYear();
+            const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+            const dd = String(hoy.getDate()).padStart(2, '0');
+            document.getElementById('input-fecha').value = `${yyyy}-${mm}-${dd}`;
+        }
+
+        function asegurarMes(mesKey) {
+            if (!movimientosPorMes[mesKey]) {
+                movimientosPorMes[mesKey] = [];
+            }
+        }
+
+        function calcularBalanceHistorico() {
+            let balance = 0;
+            Object.values(movimientosPorMes).forEach(lista => {
+                lista.forEach(m => { balance += (m.tipo === 'ingreso') ? m.monto : -m.monto; });
+            });
+            return balance;
+        }
+
+        function calcularSobranteAnterior(mesKeyTarget) {
+            let sobrante = 0;
+            const meses = Object.keys(movimientosPorMes).sort();
+            for (const m of meses) {
+                if (m < mesKeyTarget) {
+                    const { totalIngresos, totalGastos } = calcularTotalesDelMes(movimientosPorMes[m] || []);
+                    sobrante += (totalIngresos - totalGastos);
+                }
+            }
+            return sobrante;
+        }
+
+        function calcularTotalesDelMes(lista) {
+            let totalIngresos = 0;
+            let totalGastos = 0;
+            lista.forEach(m => {
+                if (m.tipo === 'ingreso') totalIngresos += m.monto;
+                else totalGastos += m.monto;
+            });
+            return { totalIngresos, totalGastos };
+        }
+
+        function poblarSelectorMeses() {
+            const select = document.getElementById('filtro-mes');
+            const mesesOrdenados = Object.keys(movimientosPorMes).sort().reverse();
+            select.innerHTML = '';
+            mesesOrdenados.forEach(mesKey => {
+                const option = document.createElement('option');
+                option.value = mesKey;
+                option.innerText = nombreMes(mesKey);
+                if (mesKey === mesSeleccionado) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+
+        function poblarFiltroCategoria(movimientosDelMes) {
+            const select = document.getElementById('filtro-categoria');
+            const valorPrevio = select.value;
+            const categoriasUnicas = [...new Set(movimientosDelMes.map(m => m.cat))].sort();
+            select.innerHTML = '<option value="">Todas las categorías</option>';
+            categoriasUnicas.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.innerText = cat;
+                select.appendChild(option);
+            });
+            if (categoriasUnicas.includes(valorPrevio)) select.value = valorPrevio;
+        }
+
+        function actualizarAnalisis() {
+            if (!graficoEvolucionInst || !graficoBalanceInst) return;
+
+            const mesesOrdenados = Object.keys(movimientosPorMes).sort();
+            
+            const labels = [];
+            const datosIngresosNuevos = [];
+            const datosGastos = [];
+            const datosBalanceAcumulado = [];
+
+            let balanceAcumuladoTemp = 0;
+
+            mesesOrdenados.forEach(mesKey => {
+                labels.push(nombreMes(mesKey));
+                const { totalIngresos, totalGastos } = calcularTotalesDelMes(movimientosPorMes[mesKey] || []);
+                datosIngresosNuevos.push(totalIngresos);
+                datosGastos.push(totalGastos);
+                balanceAcumuladoTemp += (totalIngresos - totalGastos);
+                datosBalanceAcumulado.push(balanceAcumuladoTemp);
+            });
+
+            graficoEvolucionInst.data.labels = labels;
+            graficoEvolucionInst.data.datasets[0].data = datosIngresosNuevos;
+            graficoEvolucionInst.data.datasets[1].data = datosGastos;
+            graficoEvolucionInst.update();
+
+            graficoBalanceInst.data.labels = labels;
+            graficoBalanceInst.data.datasets[0].data = datosBalanceAcumulado;
+            graficoBalanceInst.update();
+
+            const movsMesSel = movimientosPorMes[mesSeleccionado] || [];
+            const { totalIngresos: ingSel, totalGastos: gasSel } = calcularTotalesDelMes(movsMesSel);
+            const sobranteAnterior = calcularSobranteAnterior(mesSeleccionado);
+            const disponibleTotal = sobranteAnterior + ingSel;
+
+            document.getElementById('sobrante-anterior').innerText = formatearMonto(sobranteAnterior);
+            document.getElementById('disponible-total').innerText = formatearMonto(disponibleTotal);
+
+            // --- LÓGICA CORREGIDA DE TASA DE AHORRO ---
+            let tasaAhorro = 0;
+            if (ingSel > 0) {
+                tasaAhorro = ((ingSel - gasSel) / ingSel) * 100;
+            } else if (gasSel > 0) {
+                tasaAhorro = -100; // Si no tuviste ingresos pero sí gastos
+            }
+            
+            const elTasa = document.getElementById('tasa-ahorro');
+            elTasa.innerText = `${tasaAhorro.toFixed(1)}%`;
+            elTasa.className = `text-xl font-bold mt-1 ${tasaAhorro >= 0 ? 'text-sky-400' : 'text-red-400'}`;
+
+            const hoy = new Date();
+            const esMesActual = mesSeleccionado === obtenerMesActual();
+            const diasParaDividir = esMesActual ? hoy.getDate() : 30;
+            const promedioDiario = gasSel / (diasParaDividir || 1);
+            document.getElementById('promedio-diario').innerText = formatearMonto(promedioDiario);
+
+            // --- Lógica de Comparativa Mensual ---
+            const [anioStr, mesStr] = mesSeleccionado.split('-');
+            let anioNum = parseInt(anioStr, 10);
+            let mesNum = parseInt(mesStr, 10);
+            mesNum -= 1;
+            if (mesNum === 0) { mesNum = 12; anioNum -= 1; }
+            const mesAnteriorKey = `${anioNum}-${String(mesNum).padStart(2, '0')}`;
+            const movsMesAnterior = movimientosPorMes[mesAnteriorKey] || [];
+            const { totalGastos: gasAnt } = calcularTotalesDelMes(movsMesAnterior);
+
+            const elTextoComp = document.getElementById('texto-comparativa');
+            const elDetalleComp = document.getElementById('detalle-comparativa');
+
+            if (gasAnt === 0 && gasSel > 0) {
+                elTextoComp.innerText = 'Sin datos previos';
+                elTextoComp.className = 'text-base font-bold text-slate-400';
+                elDetalleComp.innerText = 'Cargá gastos el mes anterior para comparar.';
+            } else if (gasAnt === 0 && gasSel === 0) {
+                elTextoComp.innerText = 'Sin gastos';
+                elTextoComp.className = 'text-base font-bold text-slate-400';
+                elDetalleComp.innerText = 'Sin gastos registrados.';
+            } else {
+                const variacion = ((gasSel - gasAnt) / gasAnt) * 100;
+                if (variacion > 0) {
+                    elTextoComp.innerText = `📈 +${variacion.toFixed(1)}% MÁS`;
+                    elTextoComp.className = 'text-base font-bold text-red-400';
+                    elDetalleComp.innerText = `Gastaste ${formatearMonto(Math.abs(gasSel - gasAnt))} más que el mes pasado.`;
+                } else if (variacion < 0) {
+                    elTextoComp.innerText = `📉 ${Math.abs(variacion).toFixed(1)}% MENOS`;
+                    elTextoComp.className = 'text-base font-bold text-emerald-400';
+                    elDetalleComp.innerText = `Ahorraste ${formatearMonto(Math.abs(gasSel - gasAnt))} respecto al mes pasado.`;
+                } else {
+                    elTextoComp.innerText = `⚖️ IGUAL`;
+                    elTextoComp.className = 'text-base font-bold text-sky-400';
+                    elDetalleComp.innerText = `Gastaste exactamente lo mismo.`;
+                }
+            }
+
+            // --- Lógica del Top 3 ---
+            let gastosPorCategoria = {};
+            const categoriasExcluidas = ['Educación', 'Alquiler / Vivienda', 'Servicios (luz, agua, gas, internet)'];
+
+            movsMesSel.forEach(m => {
+                if (m.tipo === 'gasto' && !categoriasExcluidas.includes(m.cat)) {
+                    gastosPorCategoria[m.cat] = (gastosPorCategoria[m.cat] || 0) + m.monto;
+                }
+            });
+
+            let rankingGastos = Object.keys(gastosPorCategoria).map(cat => {
+                return { cat: cat, total: gastosPorCategoria[cat] };
+            });
+            rankingGastos.sort((a, b) => b.total - a.total);
+            
+            let top3 = rankingGastos.slice(0, 3);
+            const podioContainer = document.getElementById('podio-gastos');
+            podioContainer.innerHTML = '';
+
+            if (top3.length === 0) {
+                podioContainer.innerHTML = '<p class="text-slate-500 text-xs col-span-3 text-center py-4">No hay suficientes gastos variables registrados para armar el ranking este mes.</p>';
+            } else {
+                const medallas = ['🥇', '🥈', '🥉'];
+                const colores = ['text-amber-400', 'text-slate-300', 'text-amber-600']; 
+                
+                top3.forEach((item, i) => {
+                    podioContainer.innerHTML += `
+                        <div class="bg-slate-900 border border-slate-700 p-3.5 rounded-lg flex items-center justify-between shadow">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl">${medallas[i]}</span>
+                                <div>
+                                    <p class="text-xs font-medium text-slate-400">${item.cat}</p>
+                                    <p class="text-base font-bold ${colores[i]}">${formatearMonto(item.total)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        function mostrarConfirmacion(mensaje) {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('modal-overlay');
+                document.getElementById('modal-mensaje').innerText = mensaje;
+                overlay.classList.remove('hidden');
+
+                const btnConfirmar = document.getElementById('modal-btn-confirmar');
+                const btnCancelar = document.getElementById('modal-btn-cancelar');
+
+                function limpiar(resultado) {
+                    overlay.classList.add('hidden');
+                    btnConfirmar.removeEventListener('click', onConfirmar);
+                    btnCancelar.removeEventListener('click', onCancelar);
+                    resolve(resultado);
+                }
+                function onConfirmar() { limpiar(true); }
+                function onCancelar() { limpiar(false); }
+
+                btnConfirmar.addEventListener('click', onConfirmar);
+                btnCancelar.addEventListener('click', onCancelar);
+            });
+        }
+    </script>
+</body>
+</html>
