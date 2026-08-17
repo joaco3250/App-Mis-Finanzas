@@ -99,10 +99,6 @@
                 <h2 class="text-xl font-semibold mb-4 text-sky-300 self-start">Distribución de Gastos</h2>
                 <div class="relative w-full max-w-sm h-80 flex justify-center items-center">
                     <canvas id="graficoGastos"></canvas>
-                    <div class="absolute inset-0 flex flex-col justify-center items-center pointer-events-none pb-8">
-                        <span class="text-xs text-slate-400 uppercase font-medium">Disponible Total</span>
-                        <span id="centro-balance" class="text-2xl font-bold text-sky-400 mt-0.5">$0,00</span>
-                    </div>
                 </div>
             </section>
 
@@ -231,6 +227,45 @@
 
         const NOMBRES_MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+        // Paleta ampliada de colores para las categorías del gráfico de dona
+        const COLORES_CATEGORIAS = [
+            '#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#818cf8', '#f472b6',
+            '#facc15', '#34d399', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9',
+            '#4ade80', '#f87171', '#60a5fa', '#fcd34d', '#c084fc', '#2dd4bf',
+            '#fb7185', '#a3e635', '#93c5fd', '#fdba74', '#5eead4', '#f0abfc'
+        ];
+
+        // Valor de balance a mostrar en el centro del gráfico de dona (lo dibuja el plugin de Chart.js)
+        let balanceCentroDona = 0;
+
+        // Plugin de Chart.js: dibuja el texto "Disponible Total" centrado en el área real
+        // del gráfico (no del contenedor), para que nunca se superponga con la leyenda,
+        // sin importar cuánto crezca esta al agregar categorías.
+        const pluginCentroDona = {
+            id: 'centroDona',
+            afterDraw(chart) {
+                if (chart.canvas.id !== 'graficoGastos') return;
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return;
+                const centerX = (chartArea.left + chartArea.right) / 2;
+                const centerY = (chartArea.top + chartArea.bottom) / 2;
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                ctx.font = '600 11px Inter, -apple-system, sans-serif';
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText('DISPONIBLE TOTAL', centerX, centerY - 14);
+
+                ctx.font = '800 24px Inter, -apple-system, sans-serif';
+                ctx.fillStyle = balanceCentroDona >= 0 ? '#38bdf8' : '#f87171';
+                ctx.fillText(formatearMontoSinDecimales(balanceCentroDona), centerX, centerY + 11);
+
+                ctx.restore();
+            }
+        };
+
         // --- FUNCIONES DE AUTENTICACIÓN ---
 
         async function iniciarSesion() {
@@ -320,8 +355,9 @@
             const ctxGastos = document.getElementById('graficoGastos').getContext('2d');
             graficoGastosInst = new Chart(ctxGastos, {
                 type: 'doughnut',
-                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#818cf8', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9'], borderWidth: 2, borderColor: '#1e293b' }] },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 12, font: { size: 12 } } }, tooltip: { callbacks: { label: function(context) { if (context.label === 'Sin gastos registrados') return ' Sin gastos'; return ` ${context.label}: ${formatearMonto(context.raw)}`; } } } } }
+                data: { labels: [], datasets: [{ data: [], backgroundColor: COLORES_CATEGORIAS, borderWidth: 2, borderColor: '#1e293b' }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 12, font: { size: 12 } } }, tooltip: { callbacks: { label: function(context) { if (context.label === 'Sin gastos registrados') return ' Sin gastos'; return ` ${context.label}: ${formatearMonto(context.raw)}`; } } } } },
+                plugins: [pluginCentroDona]
             });
 
             const ctxEvolucion = document.getElementById('graficoEvolucion').getContext('2d');
@@ -474,9 +510,7 @@
             const balance = calcularBalanceHistorico();
             document.getElementById('balance-neto').innerText = formatearMonto(balance);
 
-            const elCentro = document.getElementById('centro-balance');
-            elCentro.innerText = formatearMonto(balance);
-            elCentro.className = `text-2xl font-bold mt-0.5 ${balance >= 0 ? 'text-sky-400' : 'text-red-400'}`;
+            balanceCentroDona = balance;
 
             const categoriasGastos = Object.keys(acumuladoGastos);
             const montosGastos = Object.values(acumuladoGastos);
@@ -489,7 +523,7 @@
                 } else {
                     graficoGastosInst.data.labels = categoriasGastos;
                     graficoGastosInst.data.datasets[0].data = montosGastos;
-                    graficoGastosInst.data.datasets[0].backgroundColor = ['#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#818cf8', '#f472b6', '#facc15', '#34d399', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9'];
+                    graficoGastosInst.data.datasets[0].backgroundColor = COLORES_CATEGORIAS;
                 }
                 graficoGastosInst.update();
             }
@@ -586,6 +620,10 @@
 
         function formatearMonto(numero) {
             return `$${numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        function formatearMontoSinDecimales(numero) {
+            return `$${Math.round(numero).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
         }
 
         function obtenerMontoNumerico(texto) {
